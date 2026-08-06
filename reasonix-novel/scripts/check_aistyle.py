@@ -32,10 +32,46 @@ TRANSITION_WORDS = ['然而', '但是', '可是', '却', '竟', '反倒', '反�
 EMOTION_WORDS = ['愤怒', '悲伤', '恐惧', '痛苦', '绝望', '激动', '委屈', '欣喜', '慌乱', '愧疚',
                  '心碎', '窒息', '崩溃', '震惊', '不安', '愤怒到', '心如刀绞', '心头一紧', '眼里', '浑身']
 FUZZY_WORDS = ['仿佛', '似乎', '好像', '宛如', '像是', '如同', '好比', '依稀', '隐约']
+# 顿悟词（AI 爱用"忽然/猛地"制造顿悟感）
+INSIGHT_WORDS = ['忽然', '猛地', '突然', '刹那间', '猛然', '倏地']
+# 明喻标记词（全用明喻 = 比喻审美均质化）
+SIMILE_WORDS = ['像', '如同', '宛如', '犹如', '好似', '仿佛是']
 # 动作短语（4-6 字高频动作标签，检测重复调用）
 ACTION_PATTERNS = ['皱起眉头', '握紧拳头', '深吸一口气', '低下头', '抬起头', '别过脸', '转过身',
                    '握了握', '张了张嘴', '抿了抿嘴', '叹了口气', '眨了眨眼', '攥紧', '垂下眼',
                    '攥了攥', '心头一颤', '瞳孔一缩', '嘴角勾起', '喉结动了动']
+# n-gram 高频短语检测参数
+PHRASE_MIN_COUNT = 3      # 出现 ≥3 次才报告
+PHRASE_NGRAMS = (5, 6, 7, 8)
+# 功能字（过滤含这些字的 n-gram，减少误报）
+PHRASE_FUNC_CHARS = set('的了着在是不是也就都很还又要和会没说有把让对从到么吧吗呢啊这那')
+
+
+def find_repeated_phrases(body: str, top_n: int = 8) -> list:
+    """检测高频重复短语（"青草被晒了一整天""眼睛弯成月牙"式自我复制）"""
+    from collections import Counter
+    text = re.sub(r'[\s\u3000，。！？、；：""''（）《》…—.-]', '', body)
+    counter = Counter()
+    for n in PHRASE_NGRAMS:
+        for i in range(len(text) - n + 1):
+            gram = text[i:i + n]
+            # 功能字占比 > 40% 才过滤（如"他看了看"），允许"晒了一整天"这类含少量助词的短语
+            func_ratio = sum(1 for c in gram if c in PHRASE_FUNC_CHARS) / len(gram)
+            if func_ratio > 0.4:
+                continue
+            counter[gram] += 1
+    dupes = {k: v for k, v in counter.items() if v >= PHRASE_MIN_COUNT}
+    items = sorted(dupes.items(), key=lambda x: -x[1])
+    result, covered = [], []
+    for k, v in items:
+        if any(k in c for c in covered):
+            continue
+        result.append((k, v))
+        covered.append(k)
+        if len(result) >= top_n:
+            break
+    return result
+
 
 
 def extract_body(text: str) -> str:
@@ -94,6 +130,8 @@ def analyze_chapter(file_path: Path) -> dict:
     trans_density = sum(count_word(body, w) for w in TRANSITION_WORDS) / total
     emotion_density = sum(count_word(body, w) for w in EMOTION_WORDS) / total
     fuzzy_density = sum(count_word(body, w) for w in FUZZY_WORDS) / total
+    insight_density = sum(count_word(body, w) for w in INSIGHT_WORDS) / total
+    simile_density = sum(count_word(body, w) for w in SIMILE_WORDS) / total
 
     # 7. 动作短语重复
     action_hits = {}
@@ -103,6 +141,9 @@ def analyze_chapter(file_path: Path) -> dict:
             action_hits[pat] = n
     repeated_actions = sum(1 for n in action_hits.values() if n >= 3)
 
+    # 8. 高频短语自我复制
+    repeated_phrases = find_repeated_phrases(body)
+
     return {
         'file': file_path.name,
         'para_cv': round(cv_para, 2),
@@ -111,8 +152,11 @@ def analyze_chapter(file_path: Path) -> dict:
         'trans_density': round(trans_density, 1),
         'emotion_density': round(emotion_density, 1),
         'fuzzy_density': round(fuzzy_density, 1),
+        'insight_density': round(insight_density, 1),
+        'simile_density': round(simile_density, 1),
         'action_hits': action_hits,
         'repeated_actions': repeated_actions,
+        'repeated_phrases': repeated_phrases,
     }
 
 
@@ -142,12 +186,23 @@ def print_chapter(r: dict, full: bool = False):
     print(f'模糊词密度 {r["fuzzy_density"]}/千字'
           f' → {flag_level(None, r["fuzzy_density"], [1.5, 2.5, 4.0])}'
           f' [高=仿佛/似乎堆砌]')
+    print(f'顿悟词密度 {r["insight_density"]}/千字'
+          f' → {flag_level(None, r["insight_density"], [1.0, 2.0, 3.0])}'
+          f' [高=忽然/猛地依赖，AI 制造顿悟感的习惯]')
+    print(f'明喻密度 {r["simile_density"]}/千字'
+          f' → {flag_level(None, r["simile_density"], [2.5, 4.0, 6.0])}'
+          f' [高=比喻审美均质化，全明喻无白描]')
     if r['action_hits']:
         print(f'动作短语重复：{"、".join(f"{k}×{v}" for k, v in r["action_hits"].items())}'
               f' → {flag_level(None, r["repeated_actions"], [1, 2, 3])}'
               f' [重复≥3次=角色动作指纹]')
     else:
         print('动作短语重复：无')
+    if r['repeated_phrases']:
+        print(f'高频短语自我复制：{"、".join(f"{k}×{v}" for k, v in r["repeated_phrases"][:5])}'
+              f' [出现≥3次=意象/语句复制，人类会写腻]')
+    else:
+        print('高频短语复制：无')
 
 
 def main():

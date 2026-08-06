@@ -23,6 +23,7 @@
 | 字数不足需扩充 | `guides/chapter-craft.md`（扩充技巧） | — |
 | 故事平淡需爽点 | `guides/thrill-panel.md` | — |
 | 规划/执行并发写作 | `guides/parallel-workflow.md` | `flows/phase3-writing.md` |
+| **派发子 Agent 前** | `guides/subagent-brief.md`（任务包标准模板：工具权限/绝对路径/必调子技能/排班） | `guides/parallel-workflow.md` |
 | 卷终维护圣经 | `guides/bible-template.md`（状态机） | — |
 
 ---
@@ -37,10 +38,11 @@
 
 | 排班 | 必调子技能 |
 |------|-----------|
-| 每章 | `reasonix-novel-hard-check`（机械质检：字数/句式/圣经一致，通过/退回） |
-| 每章（轮换） | `reasonix-novel-dialogue-master`（奇数章）或 `reasonix-novel-mood-composer`（偶数章） |
+| 每章 | `reasonix-novel-hard-check`（机械质检）+ `reasonix-novel-dialogue-master`（**对话打磨，AI 味重灾区，每章必调**） |
+| 每章（轮换） | `reasonix-novel-mood-composer`（偶数章加查情绪） |
 | 锚点章/高潮章 | `dialogue-master` + `mood-composer` 全调 |
 | 每 3-5 章 | `reasonix-novel-rhythm-check`（节奏诊断报告） |
+| 每章（自检后） | 读者视角自检（内建版 Reader Simulator：走神点/太假对话/钩子强度三问）——卷终由主编组织完整 reader-sim |
 
 ### B. 症状触发制（修复型工具——自检发现问题才调，没病不治）
 
